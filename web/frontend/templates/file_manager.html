@@ -1,0 +1,198 @@
+<div class="p-6 max-w-5xl mx-auto">
+
+    <h1 class="text-3xl font-bold mt-4">知识库</h1>
+
+    <!-- 顶部操作栏 -->
+    <div class="flex justify-between items-center mt-4">
+        <p class="text-gray-600">管理你的知识库文件</p>
+        <div>
+            <button onclick="openUploadModal()" class="bg-blue-600 text-white px-4 py-2 rounded shadow">
+                + 添加文档
+            </button>
+            <button onclick="refreshFileList()" class="bg-gray-500 text-white px-4 py-2 rounded shadow ml-2">
+                🔄 刷新
+            </button>
+        </div>
+    </div>
+
+    <!-- 文件列表 -->
+    <div class="mt-6 bg-white shadow-lg rounded-lg overflow-hidden">
+        <table class="w-full text-left border-collapse">
+            <thead>
+                <tr class="bg-gray-100 text-gray-600 uppercase text-sm leading-normal">
+                    <th class="py-3 px-6">文件名</th>
+                    <th class="py-3 px-6">大小</th>
+                    <th class="py-3 px-6">上传时间</th>
+                    <th class="py-3 px-6">状态</th>
+                    <th class="py-3 px-6">操作</th>
+                </tr>
+            </thead>
+            <tbody id="file-list" hx-get="/file-list/" hx-trigger="load">
+
+            </tbody>
+        </table>
+    </div>
+
+    <!-- 解析 & 上传状态 -->
+    <div id="status-messages" class="mt-4 text-sm text-gray-700"></div>
+
+    <!-- 解析所有文件 -->
+    <button hx-post="/parse-all/" hx-target="#status-messages" class="bg-green-500 text-white px-4 py-2 mt-4">
+        全部解析
+    </button>
+</div>
+
+<!-- 🔹 上传文件模态框 -->
+<!-- 🔹 上传文件模态框 -->
+<div id="upload-modal" class="hidden fixed inset-0 flex items-center justify-center bg-gray-900 bg-opacity-50 z-50">
+    <div class="bg-white rounded-lg shadow-lg w-96 p-6">
+        <h2 class="text-xl font-semibold mb-4">添加文档</h2>
+
+        <!-- 选择区 / 文件展示 -->
+        <div id="drop-area" class="border-dashed border-2 border-gray-400 p-6 text-center cursor-pointer">
+            <p id="drop-hint" class="text-gray-600">点击选择</p>
+            <p id="selected-filename" class="text-gray-800 font-medium hidden"></p>
+            <input type="file" id="file-input" class="hidden">
+        </div>
+
+        <!-- 🔹 进度条 -->
+        <div id="progress-container" class="hidden w-full bg-gray-200 rounded mt-4">
+            <div id="progress-bar" class="bg-blue-600 text-xs text-white text-center p-1 leading-none rounded w-0">
+                0%
+            </div>
+        </div>
+
+        <button id="upload-btn" class="bg-blue-600 text-white px-4 py-2 rounded mt-4 w-full">上传文件</button>
+
+        <div id="upload-status" class="mt-2 text-sm text-gray-700"></div>
+
+        <button id="close-btn" class="text-red-500 mt-4 block mx-auto hidden">
+            关闭
+        </button>
+    </div>
+</div>
+
+
+
+
+<!-- 文档查看弹窗 -->
+<div id="document-modal" class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg shadow-lg w-[90%] max-w-5xl p-6 max-h-[90vh] overflow-auto">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-bold">文档预览</h2>
+            <button onclick="closeDocumentViewer()" class="text-red-500">✖</button>
+        </div>
+        <div id="document-viewer" class="overflow-auto max-h-[70vh]">
+            <p class="text-gray-500">请选择文件进行预览</p>
+        </div>
+    </div>
+</div>
+
+
+<script>
+    let selectedFile = null;
+
+    function openUploadModal() {
+        document.getElementById('upload-modal').classList.remove('hidden');
+        resetUploadModal();
+    }
+
+    function closeUploadModal() {
+        document.getElementById('upload-modal').classList.add('hidden');
+        refreshFileList();
+    }
+
+    function refreshFileList() {
+        fetch("/file-list/")
+            .then(response => response.text())
+            .then(html => {
+                document.getElementById("file-list").innerHTML = html;
+            })
+            .catch(error => {
+                console.error("❌ 刷新文件列表失败:", error);
+            });
+    }
+
+    function resetUploadModal() {
+        selectedFile = null;
+        document.getElementById('file-input').value = null;
+        document.getElementById('drop-hint').classList.remove('hidden');
+        document.getElementById('selected-filename').classList.add('hidden');
+        document.getElementById('selected-filename').innerText = "";
+        document.getElementById('progress-container').classList.add('hidden');
+        document.getElementById('progress-bar').style.width = "0%";
+        document.getElementById('progress-bar').innerText = "0%";
+        document.getElementById('upload-status').innerHTML = "";
+        document.getElementById('close-btn').classList.add('hidden');
+        document.getElementById('upload-btn').classList.remove('hidden');
+        document.getElementById('drop-area').classList.remove('pointer-events-none');
+    }
+
+    document.getElementById('drop-area').addEventListener('click', () => {
+        document.getElementById('file-input').click();
+    });
+
+    document.getElementById('drop-area').addEventListener('drop', (event) => {
+        event.preventDefault();
+        if (event.dataTransfer.files.length > 0) {
+            showSelectedFile(event.dataTransfer.files[0]);
+        }
+    });
+
+    document.getElementById('drop-area').addEventListener('dragover', (event) => {
+        event.preventDefault();
+    });
+
+    document.getElementById('file-input').addEventListener('change', function() {
+        if (this.files.length > 0) {
+            showSelectedFile(this.files[0]);
+        }
+    });
+
+    document.getElementById('close-btn').addEventListener('click', closeUploadModal);
+
+    function showSelectedFile(file) {
+        selectedFile = file;
+        document.getElementById('drop-hint').classList.add('hidden');
+        document.getElementById('selected-filename').classList.remove('hidden');
+        document.getElementById('selected-filename').innerText = file.name;
+    }
+
+    document.getElementById('upload-btn').addEventListener('click', () => {
+        if (!selectedFile) return;
+
+        const formData = new FormData();
+        formData.append("file", selectedFile);
+
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", "/upload/", true);
+
+        const isWord = selectedFile.name.toLowerCase().endsWith(".docx");
+
+        xhr.upload.onprogress = function (event) {
+            let percent = Math.round((event.loaded / event.total) * 100);
+            if (isWord && percent === 100) {
+                percent = 50;
+            }
+            document.getElementById("progress-container").classList.remove("hidden");
+            document.getElementById("progress-bar").style.width = percent + "%";
+            document.getElementById("progress-bar").innerText = percent + "%";
+        };
+
+        xhr.onload = function () {
+            const response = JSON.parse(xhr.responseText);
+            document.getElementById("upload-status").innerHTML = `<p class="text-blue-600">${response.message}</p>`;
+            document.getElementById("progress-bar").style.width = "100%";
+            document.getElementById("progress-bar").innerText = "完成";
+            document.getElementById("upload-btn").classList.add("hidden");
+            document.getElementById("close-btn").classList.remove("hidden");
+            document.getElementById("drop-area").classList.add("pointer-events-none");
+        };
+
+        xhr.onerror = function () {
+            document.getElementById("upload-status").innerHTML = "❌ 网络错误，上传失败";
+        };
+
+        xhr.send(formData);
+    });
+</script>
